@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react'
-import { useRtkToChengduCoordinate } from '@/utils/transferNE'
+import {
+  loadCoordinateCalibration,
+  useRtkToChengduCoordinate,
+} from '@/utils/transferNE'
 import {
   HEADING_STATUS_TEXT,
   RTK_STATUS_TEXT,
@@ -49,7 +52,12 @@ function ResultCard({ item }: { item: ResultItem }) {
 
 export default function TransTest() {
   const [rawText, setRawText] = useState(defaultRtkText)
-  const coordinateResult = useRtkToChengduCoordinate(rawText)
+  const [calibration, setCalibration] = useState(() => loadCoordinateCalibration())
+  const coordinateResult = useRtkToChengduCoordinate(rawText, {
+    params: calibration.params,
+    northingCorrection: calibration.northingCorrection,
+    eastingCorrection: calibration.eastingCorrection,
+  })
 
   const result = useMemo(() => {
     const { error, parsedCount, gga, heading, ne, chengdu, chengduH } = coordinateResult
@@ -148,8 +156,17 @@ export default function TransTest() {
             粘贴 RTK 原始数据，解析 GNGGA 经纬度并换算成都 X/Y。
           </p>
         </div>
-        <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">
-          中央经线 105E
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm transition hover:bg-slate-50"
+            onClick={() => setCalibration(loadCoordinateCalibration())}
+          >
+            刷新项目参数
+          </button>
+          <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">
+            {calibration.source === 'control-points' ? '控制点参数' : '默认参数'} / 中央经线 105E
+          </div>
         </div>
       </div>
 

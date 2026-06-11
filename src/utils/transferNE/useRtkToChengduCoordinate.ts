@@ -1,16 +1,26 @@
 import { useMemo } from "react";
+import Decimal from "decimal.js";
 import {
   convertAltitudeToChengduH,
   convertLatLonToNE,
   convertNEToChengduXY,
   type ChengduXYResult,
   type ChengduHeightResult,
+  type ChengduCoordinateParams,
   type ProjectedNEResult,
 } from "./coordinate";
+import { DEFAULT_COORDINATE_CALIBRATION } from "./coordinateCalibration";
 import { parseRtkText, type RtkParsedData } from "./transRTKline";
 
 type GnggaParsedData = Extract<RtkParsedData, { type: "GNGGA" }>;
 type UniheadingaParsedData = Extract<RtkParsedData, { type: "UNIHEADINGA" }>;
+
+export type RtkToChengduCoordinateOptions = {
+  params?: ChengduCoordinateParams;
+  heightOffset?: string;
+  northingCorrection?: string;
+  eastingCorrection?: string;
+};
 
 /**
  * RTK 原始报文转换成都项目坐标结果。
@@ -74,7 +84,8 @@ function findLastParsed<T extends RtkParsedData>(
  * 从 RTK 原始文本中解析定位信息，并换算成成都项目坐标。
  */
 export function useRtkToChengduCoordinate(
-  rawText: string
+  rawText: string,
+  options: RtkToChengduCoordinateOptions = {}
 ): RtkToChengduCoordinateResult {
   return useMemo(() => {
     try {
@@ -97,9 +108,33 @@ export function useRtkToChengduCoordinate(
         };
       }
 
-      const ne = convertLatLonToNE(gga.latitude, gga.longitude);
-      const chengdu = convertNEToChengduXY(ne.N, ne.E);
-      const chengduH = convertAltitudeToChengduH(gga.altitude);
+      const projectedNE = convertLatLonToNE(gga.latitude, gga.longitude);
+      const n = new Decimal(projectedNE.N)
+        .plus(
+          options.northingCorrection ??
+            DEFAULT_COORDINATE_CALIBRATION.northingCorrection
+        )
+        .toString();
+      const e = new Decimal(projectedNE.E)
+        .plus(
+          options.eastingCorrection ??
+            DEFAULT_COORDINATE_CALIBRATION.eastingCorrection
+        )
+        .toString();
+      const ne = {
+        ...projectedNE,
+        N: n,
+        E: e,
+      };
+      const chengdu = convertNEToChengduXY(
+        ne.N,
+        ne.E,
+        options.params ?? DEFAULT_COORDINATE_CALIBRATION.params
+      );
+      const chengduH =
+        options.heightOffset === undefined
+          ? convertAltitudeToChengduH(gga.altitude)
+          : convertAltitudeToChengduH(gga.altitude, options.heightOffset);
 
       return {
         parsedCount: parsed.length,
@@ -117,5 +152,11 @@ export function useRtkToChengduCoordinate(
         error: error instanceof Error ? error.message : "转换失败",
       };
     }
-  }, [rawText]);
+  }, [
+    rawText,
+    options.eastingCorrection,
+    options.heightOffset,
+    options.northingCorrection,
+    options.params,
+  ]);
 }
